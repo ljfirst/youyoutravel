@@ -1,0 +1,49 @@
+syntax = "proto3";
+
+package user;
+
+option go_package = "./user";
+
+message UserInfo {
+    string id = 1;
+    string nickname = 2;
+    string avatar_url = 3;
+    string gender = 4;
+    string bio = 5;
+    repeated string published_itineraries = 6;
+    repeated string purchased_itineraries = 7;
+}
+
+message CreateUserRequest {
+    string wechat_code = 1;
+}
+
+message CreateUserResponse {
+    UserInfo user = 1;
+}
+
+message GetUserRequest {
+    string id = 1;
+}
+
+message GetUserResponse {
+    UserInfo user = 1;
+}
+
+message UpdateUserRequest {
+    string id = 1;
+    string nickname = 2;
+    string avatar_url = 3;
+    string gender = 4;
+    string bio = 5;
+}
+
+message UpdateUserResponse {
+    UserInfo user = 1;
+}
+
+service User {
+    rpc createUser(CreateUserRequest) returns (CreateUserResponse);
+    rpc getUser(GetUserRequest) returns (GetUserResponse);
+    rpc updateUser(UpdateUserRequest) returns (UpdateUserResponse);
+}

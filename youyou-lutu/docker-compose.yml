@@ -1,0 +1,178 @@
+version: '3.8'
+
+services:
+  # --------------------
+  #  Infrastructure
+  # --------------------
+  mongo:
+    image: mongo:5.0
+    container_name: mongo
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo-data:/data/db
+    networks:
+      - youyou-net
+
+  redis:
+    image: redis:6.2-alpine
+    container_name: redis
+    ports:
+      - "6379:6379"
+    networks:
+      - youyou-net
+
+  etcd:
+    image: bitnami/etcd:3.5
+    container_name: etcd
+    ports:
+      - "2379:2379"
+      - "2380:2380"
+    environment:
+      - ALLOW_NONE_AUTHENTICATION=yes
+      - ETCD_ADVERTISE_CLIENT_URLS=http://etcd:2379
+    networks:
+      - youyou-net
+
+  # --------------------
+  #  Backend Services (RPC)
+  # --------------------
+  user-rpc:
+    build:
+      context: ./go-zero-backend/user/rpc
+      dockerfile: Dockerfile
+    container_name: user-rpc
+    volumes:
+      - ./go-zero-backend/user/rpc:/app
+    networks:
+      - youyou-net
+    depends_on:
+      - etcd
+
+  destination-rpc:
+    build:
+      context: ./go-zero-backend/destination/rpc
+      dockerfile: Dockerfile
+    container_name: destination-rpc
+    volumes:
+      - ./go-zero-backend/destination/rpc:/app
+    networks:
+      - youyou-net
+    depends_on:
+      - etcd
+
+  itinerary-rpc:
+    build:
+      context: ./go-zero-backend/itinerary/rpc
+      dockerfile: Dockerfile
+    container_name: itinerary-rpc
+    volumes:
+      - ./go-zero-backend/itinerary/rpc:/app
+    networks:
+      - youyou-net
+    depends_on:
+      - etcd
+
+  social-rpc:
+    build:
+      context: ./go-zero-backend/social/rpc
+      dockerfile: Dockerfile
+    container_name: social-rpc
+    volumes:
+      - ./go-zero-backend/social/rpc:/app
+    networks:
+      - youyou-net
+    depends_on:
+      - etcd
+
+  marketplace-rpc:
+    build:
+      context: ./go-zero-backend/marketplace/rpc
+      dockerfile: Dockerfile
+    container_name: marketplace-rpc
+    volumes:
+      - ./go-zero-backend/marketplace/rpc:/app
+    networks:
+      - youyou-net
+    depends_on:
+      - etcd
+
+  # --------------------
+  #  API Gateways
+  # --------------------
+  user-api:
+    build:
+      context: ./go-zero-backend/user/api
+      dockerfile: Dockerfile
+    container_name: user-api
+    ports:
+      - "8001:8001"
+    volumes:
+      - ./go-zero-backend/user/api:/app
+    networks:
+      - youyou-net
+    depends_on:
+      - user-rpc
+
+  destination-api:
+    build:
+      context: ./go-zero-backend/destination/api
+      dockerfile: Dockerfile
+    container_name: destination-api
+    ports:
+      - "8002:8002"
+    volumes:
+      - ./go-zero-backend/destination/api:/app
+    networks:
+      - youyou-net
+    depends_on:
+      - destination-rpc
+
+  itinerary-api:
+    build:
+      context: ./go-zero-backend/itinerary/api
+      dockerfile: Dockerfile
+    container_name: itinerary-api
+    ports:
+      - "8003:8003"
+    volumes:
+      - ./go-zero-backend/itinerary/api:/app
+    networks:
+      - youyou-net
+    depends_on:
+      - itinerary-rpc
+
+  social-api:
+    build:
+      context: ./go-zero-backend/social/api
+      dockerfile: Dockerfile
+    container_name: social-api
+    ports:
+      - "8004:8004"
+    volumes:
+      - ./go-zero-backend/social/api:/app
+    networks:
+      - youyou-net
+    depends_on:
+      - social-rpc
+
+  marketplace-api:
+    build:
+      context: ./go-zero-backend/marketplace/api
+      dockerfile: Dockerfile
+    container_name: marketplace-api
+    ports:
+      - "8005:8005"
+    volumes:
+      - ./go-zero-backend/marketplace/api:/app
+    networks:
+      - youyou-net
+    depends_on:
+      - marketplace-rpc
+
+volumes:
+  mongo-data:
+
+networks:
+  youyou-net:
+    driver: bridge

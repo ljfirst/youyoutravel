@@ -1,0 +1,62 @@
+syntax = "proto3";
+
+package itinerary;
+
+option go_package = "./itinerary";
+
+message Node {
+    string id = 1;
+    string type = 2; // e.g., "hotel", "flight", "activity"
+    string third_party_id = 3;
+    string user_budgeted_price = 4;
+    string notes = 5;
+    string start_time = 6;
+    string end_time = 7;
+}
+
+message ItineraryInfo {
+    string id = 1;
+    string user_id = 2;
+    string title = 3;
+    string start_date = 4;
+    string end_date = 5;
+    repeated Day days = 6;
+}
+
+message Day {
+    string date = 1;
+    repeated Node nodes = 2;
+}
+
+message CreateItineraryRequest {
+    string user_id = 1;
+    string title = 2;
+}
+
+message CreateItineraryResponse {
+    ItineraryInfo itinerary = 1;
+}
+
+message GetItineraryRequest {
+    string id = 1;
+}
+
+message GetItineraryResponse {
+    ItineraryInfo itinerary = 1;
+}
+
+message UpdateItineraryRequest {
+    string id = 1;
+    string title = 2;
+    repeated Day days = 3;
+}
+
+message UpdateItineraryResponse {
+    ItineraryInfo itinerary = 1;
+}
+
+service Itinerary {
+    rpc createItinerary(CreateItineraryRequest) returns (CreateItineraryResponse);
+    rpc getItinerary(GetItineraryRequest) returns (GetItineraryResponse);
+    rpc updateItinerary(UpdateItineraryRequest) returns (UpdateItineraryResponse);
+}
