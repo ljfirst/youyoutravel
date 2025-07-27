@@ -9,6 +9,72 @@
 - 身份验证：使用JWT令牌
 - 错误处理：统一的错误码和错误信息
 
+### 1.1 API版本控制策略
+
+采用URI路径版本控制，格式为：`/api/v{version}/{resource}`
+
+#### 1.1.1 版本号规则
+- 主版本号：`v1`, `v2`...，表示不兼容的API变更
+- 次版本更新：通过API文档和变更日志传达，不修改版本号
+
+#### 1.1.2 版本管理原则
+- 每个主版本API独立部署，可并行运行
+- 新功能优先添加到最新版本
+- 旧版本API提供至少6个月的过渡期支持
+- 版本弃用前3个月发布公告
+
+#### 1.1.3 版本迁移策略
+- 提供版本迁移指南和自动化工具
+- 保留关键业务数据的向下兼容性
+- 提供版本切换的灰度发布能力
+
+#### 1.1.4 示例
+```
+# 当前版本
+GET /api/v1/itineraries/60001
+
+# 旧版本（过渡期内可用）
+GET /api/v0/itineraries/60001
+```
+
+### 1.2 错误码规范
+
+采用分层错误码设计，格式为：`XXX-YYYY`，其中：
+- `XXX`：服务域标识（100-999）
+- `YYYY`：具体错误编号（0001-9999）
+
+#### 1.1.1 服务域划分
+- **100**：用户服务（User Service）
+- **200**：目的地服务（Destination Service）
+- **300**：行程服务（Itinerary Service）
+- **400**：社交服务（Social Service）
+- **500**：市场服务（Marketplace Service）
+- **900**：系统级错误
+
+#### 1.1.2 通用错误码
+| 错误码 | 描述 | HTTP状态码 | 处理建议 |
+|--------|------|------------|----------|
+| 900-0001 | 系统内部错误 | 500 | 查看服务日志 |
+| 900-0002 | 参数验证失败 | 400 | 检查请求参数格式 |
+| 900-0003 | 资源不存在 | 404 | 确认资源ID有效性 |
+| 900-0004 | 权限不足 | 403 | 检查用户权限 |
+| 900-0005 | 请求频率限制 | 429 | 减少请求频率 |
+| 900-0006 | 第三方服务错误 | 503 | 稍后重试 |
+
+#### 1.1.3 错误响应格式
+所有API错误响应遵循统一格式：
+```json
+{
+  "code": "300-0002",
+  "message": "行程不存在",
+  "details": {
+    "itinerary_id": "60001",
+    "timestamp": "2023-11-15T14:30:00Z"
+  },
+  "request_id": "req-123e4567-e89b-12d3-a456-426614174000"
+}
+```
+
 ## 2. 核心API定义
 
 ### 2.1 用户服务 (User API)
@@ -196,6 +262,13 @@ package service_name;
 option go_package = "./service_name_rpc/pb"; // Go包路径
 
 // 消息定义
+// 通用错误消息
+message Error {
+  int32 code = 1;        // 错误码
+  string message = 2;    // 错误信息
+  string details = 3;    // 详细错误描述
+}
+
 message RequestMessage {
   // 字段定义
 }
@@ -338,4 +411,191 @@ service Marketplace {
 ```
 
 ### 3.3 其他RPC服务
-其他服务（用户、行程、社交等）的RPC定义将遵循类似模式，包含各自领域的消息和方法定义。
+### 3.4 用户RPC服务
+
+```protobuf
+syntax = "proto3";
+
+package user;
+
+option go_package = "./user_rpc/pb";
+
+import "google/protobuf/empty.proto";
+
+// 用户信息消息
+message User {
+  string id = 1;                // 用户ID
+  string openid = 2;            // 微信openid
+  string nickname = 3;          // 昵称
+  string avatar_url = 4;        // 头像URL
+  int32 gender = 5;             // 性别
+  string phone = 6;             // 手机号
+  string email = 7;             // 邮箱
+  string created_at = 8;        // 创建时间
+  string updated_at = 9;        // 更新时间
+  string last_login_at = 10;    // 最后登录时间
+  int32 status = 11;            // 状态
+}
+
+// 用户信息请求
+message GetUserRequest {
+  string id = 1;                // 用户ID
+}
+
+// 用户资产响应
+message UserAssetsResponse {
+  repeated string published_itineraries = 1; // 已发布行程
+  repeated string purchased_itineraries = 2; // 已购买行程
+  double balance = 3;             // 账户余额
+  int32 points = 4;               // 积分
+}
+
+// 用户信息响应
+message GetUserResponse {
+  User user = 1;                // 用户信息
+}
+
+// 更新用户信息请求
+message UpdateUserRequest {
+  string id = 1;                // 用户ID
+  string nickname = 2;          // 昵称
+  string avatar_url = 3;        // 头像URL
+  int32 gender = 4;             // 性别
+  string phone = 5;             // 手机号
+  string email = 6;             // 邮箱
+}
+
+// 更新用户信息响应
+message UpdateUserResponse {
+  User user = 1;                // 更新后的用户信息
+  bool success = 2;             // 是否成功
+  string message = 3;           // 消息
+}
+
+// 用户RPC服务
+service User {
+  rpc GetUser(GetUserRequest) returns (GetUserResponse) {
+  // 错误码:
+  // 400: 请求参数无效
+  // 404: 用户不存在
+  // 500: 服务器内部错误
+}
+
+rpc GetUserAssets(GetUserAssetsRequest) returns (UserAssetsResponse) {
+  // 错误码:
+  // 400: 请求参数无效
+  // 401: 未授权访问
+  // 404: 用户不存在
+}
+  rpc UpdateUser(UpdateUserRequest) returns (UpdateUserResponse);
+  rpc GetUserAssets(GetUserRequest) returns (UserAssetsResponse);
+}
+```
+
+### 3.5 行程RPC服务
+
+```protobuf
+syntax = "proto3";
+
+package itinerary;
+
+option go_package = "./itinerary_rpc/pb";
+
+import "google/protobuf/empty.proto";
+import "user_rpc/pb/user.proto";
+
+// 行程节点消息
+message ItineraryNode {
+  string id = 1;                // 节点ID
+  string type = 2;              // 类型
+  string title = 3;             // 标题
+  string description = 4;       // 描述
+  string start_time = 5;        // 开始时间
+  string end_time = 6;          // 结束时间
+  int32 duration = 7;           // 持续时间(分钟)
+  Location location = 8;        // 位置信息
+  ThirdPartyInfo third_party_info = 9; // 第三方信息
+  double user_budgeted_price = 10; // 用户预算价格
+  string notes = 11;            // 用户笔记
+  repeated string images = 12;  // 图片URL列表
+  int32 order = 13;             // 排序序号
+}
+
+// 行程消息
+message Itinerary {
+  string id = 1;                // 行程ID
+  string author_id = 2;         // 创建者ID
+  string title = 3;             // 行程标题
+  string description = 4;       // 行程描述
+  string cover_image = 5;       // 封面图片URL
+  string start_date = 6;        // 开始日期
+  string end_date = 7;          // 结束日期
+  repeated string destination_ids = 8; // 目的地IDs
+  string status = 9;            // 状态
+  string visibility = 10;       // 可见性
+  repeated Collaborator collaborators = 11; // 协作者
+  repeated ItineraryDay days = 12; // 每日行程
+  Budget budget = 13;           // 预算信息
+  repeated string tags = 14;    // 标签
+  string created_at = 15;       // 创建时间
+  string updated_at = 16;       // 更新时间
+}
+
+// 行程RPC服务
+service Itinerary {
+  rpc CreateItinerary(CreateItineraryRequest) returns (CreateItineraryResponse);
+  rpc GetItinerary(GetItineraryRequest) returns (GetItineraryResponse);
+  rpc UpdateItinerary(UpdateItineraryRequest) returns (UpdateItineraryResponse);
+  rpc DeleteItinerary(DeleteItineraryRequest) returns (google.protobuf.Empty);
+  rpc AddItineraryNode(AddItineraryNodeRequest) returns (AddItineraryNodeResponse);
+}
+```
+
+### 3.6 社交RPC服务
+
+```protobuf
+syntax = "proto3";
+
+package social;
+
+option go_package = "./social_rpc/pb";
+
+import "google/protobuf/empty.proto";
+import "user_rpc/pb/user.proto";
+import "itinerary_rpc/pb/itinerary.proto";
+
+// 分享消息
+message Share {
+  string id = 1;                // 分享ID
+  string itinerary_id = 2;      // 行程ID
+  string user_id = 3;           // 用户ID
+  string title = 4;             // 标题
+  string description = 5;       // 描述
+  string share_url = 6;         // 分享URL
+  string visibility = 7;        // 可见性
+  string created_at = 8;        // 创建时间
+  int32 view_count = 9;         // 查看次数
+}
+
+// 评论消息
+message Comment {
+  string id = 1;                // 评论ID
+  string itinerary_id = 2;      // 行程ID
+  string user_id = 3;           // 用户ID
+  string content = 4;           // 内容
+  repeated string images = 5;   // 图片URL列表
+  string created_at = 6;        // 创建时间
+  string updated_at = 7;        // 更新时间
+  int32 status = 8;             // 状态
+}
+
+// 社交RPC服务
+service Social {
+  rpc ShareItinerary(ShareItineraryRequest) returns (ShareItineraryResponse);
+  rpc AddCollaborator(AddCollaboratorRequest) returns (AddCollaboratorResponse);
+  rpc AddComment(AddCommentRequest) returns (AddCommentResponse);
+  rpc GetComments(GetCommentsRequest) returns (GetCommentsResponse);
+}
+```
+
+其他服务的RPC定义遵循上述类似模式，包含各自领域的消息和方法定义。

@@ -12,6 +12,51 @@ MongoDB仅负责存储以下数据：
 - 系统运行必需的相对静态基础数据：目的地地理坐标、简介等
 
 ### 1.3 缓存策略
+
+为高效处理高频第三方API调用，采用Redis作为分布式缓存解决方案，具体实现如下：
+
+### 1.3.1 缓存架构
+- **多级缓存**：应用内存缓存(LRU) → Redis分布式缓存 → 第三方API
+- **缓存集群**：主从复制+哨兵模式确保高可用
+- **数据分片**：按业务域(用户/目的地/行程)进行数据分片
+
+### 1.3.2 缓存键设计规范
+采用统一命名格式：`{业务域}:{数据类型}:{唯一标识}:{版本}`
+
+示例：
+```
+# 目的地天气缓存
+weather:destination:10001:v1
+
+# 酒店价格缓存
+hotel:price:hotel12345:v2
+
+# 用户行程缓存
+itinerary:user:60001:active:v1
+```
+
+### 1.3.3 过期策略
+根据数据特性设置差异化TTL：
+- **高频变动数据**（酒店价格/航班状态）：5-15分钟
+- **中等变动数据**（天气/景点开放状态）：1-3小时
+- **低频变动数据**（目的地基础信息）：24-72小时
+- **用户私有数据**（草稿行程）：7天（滑动窗口）
+
+### 1.3.4 缓存更新机制
+- **主动更新**：数据变更时通过发布订阅模式主动更新缓存
+- **被动失效**：设置合理TTL+定期后台刷新
+- **缓存预热**：系统启动时预加载热门目的地数据
+
+### 1.3.5 缓存一致性保障
+- **缓存穿透防护**：布隆过滤器过滤无效Key
+- **缓存击穿防护**：热点数据永不过期+定时更新
+- **缓存雪崩防护**：TTL随机偏移(±5%)+熔断降级机制
+- **数据一致性**：采用"更新数据库→删除缓存"策略，避免脏数据
+
+### 1.3.6 缓存监控
+- 实时监控缓存命中率(目标>90%)
+- 缓存容量预警(阈值85%)
+- 热点Key自动识别与保护
 对于高频调用的第三方API，在应用层或使用Redis设计合理的缓存策略，提升性能并降低API调用成本。
 
 ## 2. 核心Collection设计
@@ -195,6 +240,71 @@ MongoDB仅负责存储以下数据：
   "reply": {
     "content": String,           // 回复内容
     "created_at": Date           // 回复时间
+  }
+}
+```
+
+## 2.6 数据验证规则
+
+为确保数据一致性和完整性，为各集合添加以下验证规则：
+
+### 2.6.1 users集合验证规则
+```json
+{
+  "$jsonSchema": {
+    "bsonType": "object",
+    "required": ["openid", "created_at", "status"],
+    "properties": {
+      "openid": {"bsonType": "string", "description": "微信用户唯一标识，不能为空"},
+      "nickname": {"bsonType": "string", "maxLength": 50, "description": "用户昵称，最多50个字符"},
+      "avatar_url": {"bsonType": "string", "pattern": "^https?://", "description": "头像URL必须是有效的HTTP/HTTPS URL"},
+      "gender": {"enum": [0, 1, 2], "description": "性别只能是0(未知)、1(男)或2(女)"},
+      "status": {"enum": [0, 1], "description": "状态只能是0(正常)或1(禁用)"},
+      "phone": {"bsonType": "string", "pattern": "^1[3-9]\\d{9}$", "description": "手机号格式必须正确"},
+      "email": {"bsonType": "string", "pattern": "^[\\w-]+(\\.[\\w-]+)*@[\\w-]+(\\.[\\w-]+)+$", "description": "邮箱格式必须正确"}
+    }
+  }
+}
+```
+
+### 2.6.2 itineraries集合验证规则
+```json
+{
+  "$jsonSchema": {
+    "bsonType": "object",
+    "required": ["author_id", "title", "start_date", "end_date", "status", "visibility"],
+    "properties": {
+      "title": {"bsonType": "string", "minLength": 1, "maxLength": 100, "description": "行程标题不能为空且最多100个字符"},
+      "status": {"enum": ["draft", "active", "archived"], "description": "状态只能是draft、active或archived"},
+      "visibility": {"enum": ["private", "public", "shared"], "description": "可见性只能是private、public或shared"},
+      "start_date": {"bsonType": "date", "description": "开始日期必须是有效的日期类型"},
+      "end_date": {
+        "bsonType": "date",
+        "description": "结束日期必须晚于开始日期",
+        "$expr": {"$gt": ["$end_date", "$start_date"]}
+      },
+      "days": {
+        "bsonType": "array",
+        "minItems": 1,
+        "description": "行程至少包含一天",
+        "items": {
+          "bsonType": "object",
+          "properties": {
+            "nodes": {
+              "bsonType": "array",
+              "items": {
+                "bsonType": "object",
+                "required": ["type", "title", "start_time", "end_time", "order"],
+                "properties": {
+                  "type": {"enum": ["transport", "accommodation", "attraction", "food", "shopping", "activity"], "description": "节点类型必须是预定义值之一"},
+                  "user_budgeted_price": {"bsonType": "number", "minimum": 0, "description": "预算价格不能为负数"}
+                }
+              }
+            }
+          }
+        }
+      }
+    }
   }
 }
 ```
