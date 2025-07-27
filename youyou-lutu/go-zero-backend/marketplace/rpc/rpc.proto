@@ -1,0 +1,61 @@
+syntax = "proto3";
+
+package marketplace;
+
+option go_package = "./marketplace";
+
+message ItineraryProduct {
+    string id = 1;
+    string author_id = 2;
+    string original_itinerary_id = 3;
+    string title = 4;
+    string cover_image = 5;
+    string description = 6;
+    repeated string tags = 7;
+    double price = 8;
+    string status = 9;
+    int32 sales_count = 10;
+    double average_rating = 11;
+    SnapshotData snapshot_data = 12;
+}
+
+message SnapshotData {
+    double estimated_cost = 1;
+    int32 days = 2;
+}
+
+message PublishItineraryRequest {
+    string itinerary_id = 1;
+    string author_id = 2;
+    string title = 3;
+    string cover_image = 4;
+    string description = 5;
+    double price = 6;
+}
+
+message PublishItineraryResponse {
+    ItineraryProduct product = 1;
+}
+
+message GetProductRequest {
+    string id = 1;
+}
+
+message GetProductResponse {
+    ItineraryProduct product = 1;
+}
+
+message PurchaseProductRequest {
+    string product_id = 1;
+    string user_id = 2;
+}
+
+message PurchaseProductResponse {
+    string order_id = 1;
+}
+
+service Marketplace {
+    rpc publishItinerary(PublishItineraryRequest) returns (PublishItineraryResponse);
+    rpc getProduct(GetProductRequest) returns (GetProductResponse);
+    rpc purchaseProduct(PurchaseProductRequest) returns (PurchaseProductResponse);
+}

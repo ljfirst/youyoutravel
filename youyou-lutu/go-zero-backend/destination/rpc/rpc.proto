@@ -1,0 +1,36 @@
+syntax = "proto3";
+
+package destination;
+
+option go_package = "./destination";
+
+message DestinationInfo {
+    string id = 1;
+    string name = 2;
+    string address = 3;
+    string city = 4;
+    string geo_coordinate = 5;
+    repeated string tags = 6;
+    string official_intro = 7;
+}
+
+message GetDestinationRequest {
+    string id = 1;
+}
+
+message GetDestinationResponse {
+    DestinationInfo destination = 1;
+}
+
+message SearchDestinationsRequest {
+    string keyword = 1;
+}
+
+message SearchDestinationsResponse {
+    repeated DestinationInfo destinations = 1;
+}
+
+service Destination {
+    rpc getDestination(GetDestinationRequest) returns (GetDestinationResponse);
+    rpc searchDestinations(SearchDestinationsRequest) returns (SearchDestinationsResponse);
+}
